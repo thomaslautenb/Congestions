@@ -90,12 +90,25 @@ plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b'))
 plt.show()
 
-# 2. Wind and Solar Data with Bottleneck Highlight
+# Step 2: Wind and Solar Data with Enhanced Bottleneck Highlight
 bottleneck_period = engpass_reports.iloc[0]["Datum"]
 plt.figure(figsize=(14, 7))
+
+# Plot Wind Data
 plt.plot(wind_data.index, wind_data["Region_A"], label="Wind Energy (Region A)", color="green")
-plt.axvspan(bottleneck_period - pd.Timedelta(hours=6), bottleneck_period + pd.Timedelta(hours=6), color='orange', alpha=0.3, label="Bottleneck Period")
+
+# Highlight Bottleneck Period with increased opacity and border
+plt.axvspan(bottleneck_period - pd.Timedelta(hours=6), bottleneck_period + pd.Timedelta(hours=6), 
+            color='orange', alpha=0.5, label="Bottleneck Period", edgecolor='red', linestyle='--')
+
+# Plot Solar Data
 plt.plot(solar_data.index, solar_data["Region_A"], label="Solar Energy (Region A)", color="gold")
+
+# Annotate the bottleneck period
+plt.annotate('Bottleneck Period', xy=(bottleneck_period, max(wind_data["Region_A"].max(), solar_data["Region_A"].max())),
+             xytext=(bottleneck_period + pd.Timedelta(days=10), max(wind_data["Region_A"].max(), solar_data["Region_A"].max()) + 50),
+             arrowprops=dict(facecolor='black', shrink=0.05), fontsize=12, color='red')
+
 plt.title("Wind and Solar Data for Region A with Bottleneck Period Highlighted", fontsize=16)
 plt.xlabel("Date", fontsize=14)
 plt.ylabel("Energy (MW)", fontsize=14)
@@ -145,19 +158,47 @@ for index, row in engpass_reports.iterrows():
     # Store the loadings
     line_loadings_before_bottlenecks[index] = line_data.loc[start_time:end_time, affected_lines]
 
-# Step 2: Visualization of Line Loadings Before Bottlenecks
+# Step 1: Identify the time just before the bottleneck happens (e.g., 1 hour before)
+bottleneck_index = 0  # You can change this to any other bottleneck event
+bottleneck_time = engpass_reports.iloc[bottleneck_index]["Datum"]
+time_before_bottleneck = bottleneck_time - pd.Timedelta(hours=1)
 
-# Plot line loadings for each bottleneck event
-for bottleneck_id, line_loadings in line_loadings_before_bottlenecks.items():
-    plt.figure(figsize=(14, 7))
+# Step 2: Get the line loadings at that specific time
+line_loadings_at_time = line_data.loc[time_before_bottleneck]
+
+# Step 3: Plot the Network Graph with Line Loadings
+
+plt.figure(figsize=(10, 8))
+
+# Draw the network graph
+pos = nx.circular_layout(G)
+edges = G.edges()
+
+# Map the line loadings to the edges in the graph
+edge_colors = []
+edge_widths = []
+
+for line in lines:
+    loading = line_loadings_at_time[line]
+    capacity = line_capacities[lines.index(line)]
     
-    for line in line_loadings.columns:
-        plt.plot(line_loadings.index, line_loadings[line], label=f"Line {line}")
-        plt.axhline(y=line_capacities[lines.index(line)], color='r', linestyle='--', label=f"Capacity of {line}")
+    # Normalize loading to determine the edge width (scale it appropriately)
+    edge_width = 5 * (loading / capacity)
+    edge_widths.append(edge_width)
     
-    plt.title(f"Line Loadings Before Bottleneck Event {bottleneck_id}", fontsize=16)
-    plt.xlabel("Time", fontsize=14)
-    plt.ylabel("Loading (MW)", fontsize=14)
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    # Color based on loading (green to red)
+    if loading < 0.7 * capacity:
+        edge_color = 'green'
+    elif loading < 1.0 * capacity:
+        edge_color = 'orange'
+    else:
+        edge_color = 'red'
+    
+    edge_colors.append(edge_color)
+
+# Draw the graph with varying edge widths and colors
+nx.draw(G, pos, with_labels=True, node_size=700, node_color='lightblue', font_size=15, 
+        edge_color=edge_colors, width=edge_widths)
+
+plt.title(f"Network Graph with Line Loadings Before Bottleneck at {time_before_bottleneck}", fontsize=16)
+plt.show()
